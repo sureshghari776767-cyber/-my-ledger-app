@@ -1,12 +1,11 @@
 import streamlit as st
-import openai
+from openai import OpenAI
 import pandas as pd
-import datetime
 import json
 
-# --- सिर्फ 1 आसान चाबी (OpenAI की) ---
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
-openai.api_key = OPENAI_API_KEY
+# --- नए तरीके से OpenAI क्लाइंट सेटअप ---
+# यह नए OpenAI वर्जन (v1.0.0+) के नियमों के अनुसार है
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 st.title("📊 AI स्मार्ट खाता बुक")
 
@@ -14,17 +13,18 @@ st.title("📊 AI स्मार्ट खाता बुक")
 if 'ledger_data' not in st.session_state:
     st.session_state['ledger_data'] = []
 
-# --- AI इंजन जो आपकी भाषा समझेगा ---
+# --- नया AI इंजन जो आपकी भाषा समझेगा ---
 def ask_openai_ai(user_text):
     prompt = f"""Analyze this text in any language: "{user_text}". Extract details into JSON format ONLY. Do not include markdown or backticks like ```json.
     Format: {{"name": "Customer Name", "action": "'credit' or 'paid' or 'clear'", "amount": number, "phone": "phone or null"}}"""
     
-    response = openai.ChatCompletion.create(
+    # नए वर्जन का सही कोड syntax
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0
     )
-    return json.loads(response.choices.message.content.strip())
+    return json.loads(response.choices[0].message.content.strip())
 
 # --- डेटा अपडेट करने का लॉजिक ---
 def update_internal_ledger(parsed_data):
@@ -36,7 +36,6 @@ def update_internal_ledger(parsed_data):
     if not name:
         return "❌ AI नाम नहीं पहचान पाया। कृपया स्पष्ट नाम लिखें।"
     
-    # पुरानी लिस्ट को ढूंढें
     ledger = st.session_state['ledger_data']
     found = False
     
@@ -48,12 +47,11 @@ def update_internal_ledger(parsed_data):
             elif action == 'paid':
                 item['Total Paid'] += amount
             elif action == 'clear':
-                item['Total Paid'] = item['Total Credit'] # जमा को उधार के बराबर कर दिया ताकि बैलेंस 0 हो जाए
+                item['Total Paid'] = item['Total Credit']
             item['Net Balance'] = item['Total Credit'] - item['Total Paid']
             break
             
     if not found:
-        # अगर नया ग्राहक है
         new_entry = {
             "Name": name,
             "Phone": phone,
